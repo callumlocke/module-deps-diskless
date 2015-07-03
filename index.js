@@ -1,7 +1,5 @@
-var fs = require('fs');
 var path = require('path');
 
-var browserResolve = require('browser-resolve');
 var nodeResolve = require('resolve');
 var detective = require('detective');
 var through = require('through2');
@@ -11,6 +9,7 @@ var combine = require('stream-combiner2');
 var duplexer = require('duplexer2');
 var xtend = require('xtend');
 var defined = require('defined');
+var streamifier = require('streamifier');
 
 var inherits = require('inherits');
 var Transform = require('readable-stream').Transform;
@@ -24,9 +23,12 @@ function Deps (opts) {
     Transform.call(this, { objectMode: true });
     
     if (!opts) opts = {};
+
+    if (!opts.readFile) throw new TypeError('readFile option required');
     
     this.basedir = opts.basedir || process.cwd();
     this.cache = opts.cache;
+    this.readFile = opts.readFile;
     this.pkgCache = opts.packageCache || {};
     this.pkgFileCache = {};
     this.pkgFileCachePending = {};
@@ -49,7 +51,7 @@ function Deps (opts) {
     
     this.transforms = [].concat(opts.transform).filter(Boolean);
     this.globalTransforms = [].concat(opts.globalTransform).filter(Boolean);
-    this.resolver = opts.resolve || browserResolve;
+    this.resolver = opts.resolve;
     this.options = xtend(opts);
     if (!this.options.modules) this.options.modules = {};
 
@@ -178,19 +180,19 @@ Deps.prototype.resolve = function (id, parent, cb) {
     });
 };
 
-Deps.prototype.readFile = function (file, id, pkg) {
-    var self = this;
-    var tr = through();
-    if (this.cache && this.cache[file]) {
-        tr.push(this.cache[file].source);
-        tr.push(null);
-        return tr;
-    }
-    var rs = fs.createReadStream(file);
-    rs.on('error', function (err) { self.emit('error', err) });
-    this.emit('file', file, id);
-    return rs;
-};
+// Deps.prototype.readFile = function (file, id, pkg) {
+//     var self = this;
+//     var tr = through();
+//     if (this.cache && this.cache[file]) {
+//         tr.push(this.cache[file].source);
+//         tr.push(null);
+//         return tr;
+//     }    
+//     var rs = fs.createReadStream(file);
+//     rs.on('error', function (err) { self.emit('error', err) });
+//     this.emit('file', file, id);
+//     return rs;
+// };
 
 Deps.prototype.getTransforms = function (file, pkg, opts) {
     if (!opts) opts = {};
@@ -361,14 +363,23 @@ Deps.prototype.walk = function (id, parent, cb) {
         var c = self.cache && self.cache[file];
         if (c) return fromDeps(file, c.source, c.package, Object.keys(c.deps));
         
-        self.readFile(file, id, pkg)
-            .pipe(self.getTransforms(file, pkg, {
-                builtin: has(parent.modules, id)
-            }))
-            .pipe(concat(function (body) {
-                fromSource(file, body.toString('utf8'), pkg);
-            }))
-        ;
+        // customised...
+        self.emit('file', file, id);
+        self.readFile(file, function (err, contents) {
+            if (err) {
+                self.emit('error', err);
+                return;
+            }
+
+            streamifier.createReadStream(contents)
+                .pipe(self.getTransforms(file, pkg, {
+                    builtin: has(parent.modules, id)
+                }))
+                .pipe(concat(function (body) {
+                    fromSource(file, body.toString('utf8'), pkg);
+                }))
+            ;
+        });
     });
 
     function fromSource (file, src, pkg) {
@@ -470,7 +481,7 @@ Deps.prototype.lookupPackage = function (file, cb) {
         if (pcached) return pcached.push(onpkg);
         pcached = self.pkgFileCachePending[pkgfile] = [];
         
-        fs.readFile(pkgfile, function (err, src) {
+        self.readFile(pkgfile, function (err, src) {
             if (err) return onpkg();
             try { var pkg = JSON.parse(src) }
             catch (err) {

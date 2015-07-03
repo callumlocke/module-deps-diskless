@@ -1,14 +1,13 @@
 {
-  "name": "module-deps",
+  "name": "module-deps-diskless",
   "version": "3.8.1",
-  "description": "walk the dependency graph to generate json output that can be fed into browser-pack",
+  "description": "fork of module-deps adapted so it can't access the disk directly",
   "main": "index.js",
   "bin": {
     "module-deps": "bin/cmd.js"
   },
   "dependencies": {
     "JSONStream": "^1.0.3",
-    "browser-resolve": "^1.7.0",
     "concat-stream": "~1.4.5",
     "defined": "^1.0.0",
     "detective": "^4.0.0",
@@ -18,6 +17,7 @@
     "readable-stream": "^1.1.13",
     "resolve": "^1.1.3",
     "stream-combiner2": "~1.0.0",
+    "streamifier": "^0.1.1",
     "subarg": "^1.0.0",
     "through2": "^1.0.0",
     "xtend": "^4.0.0"
@@ -43,11 +43,6 @@
     "exports",
     "json"
   ],
-  "author": {
-    "name": "James Halliday",
-    "email": "mail@substack.net",
-    "url": "http://substack.net"
-  },
   "engines": {
     "node": ">= 0.6"
   },
